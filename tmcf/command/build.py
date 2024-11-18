@@ -73,10 +73,11 @@ def handle_line(lines: Consumable, path: str):
 
 def file_generations(tokens: list[str], lines: Consumable, path: str):
     out_dp = os.path.join(config["data_out"], "tmcf_build")
-    content, replace_value, replacements = function_for_loop(tokens[2:], lines, path)
+    functions, variables, replacementss = function_for_loop(tokens[2:], lines, path)
 
-    for [function, replacement] in zip(content, replacements):
-        filename = tokens[2].replace(replace_value, str(replacement))
+    print(functions, variables, list(replacementss))
+    for [function, replacements] in zip(functions, replacementss):
+        filename = bulk_replace(tokens[2], variables, replacements)
         if filename == tokens[2]:
             l.fatal(f"Function file names in 'generate' must include a variable from the for loop (cannot create duplicate file names)", function_ref(path, lines.index))
 
@@ -129,10 +130,9 @@ def parse_for_loop(tokens: list[str], ref: str) -> (list[str], Iterable[str]):
             items = map_to_nested(items)
         if not isinstance(items, list):
             l.fatal(f"Variable '{replacement}' used in for loop is not a list", ref)
-
     return variables, items
 
-def function_for_loop(tokens: list[str], lines: Consumable, path: str):
+def function_for_loop(tokens: list[str], lines: Consumable, path: str) -> (list[str], list[str], list):
     ref = function_ref(path, lines.index)
     variables, items = parse_for_loop(tokens[1:], ref)
     block_lines: list[str] = []
@@ -149,19 +149,17 @@ def function_for_loop(tokens: list[str], lines: Consumable, path: str):
     else:
         output = "".join(block_lines)
 
-    return_value = ""
+    items = list(items) # enumerations can only be used once, so convert it to a list
+    return [bulk_replace(output, variables, item) for item in items], variables, items
 
-    for item in items:
-        temp = output
-        try:
-            for [variable_name, value] in zip(variables, item, strict=True):
-                temp = temp.replace(variable_name, str(value))
-        except ValueError:
-            l.fatal("Mismatch in number of variables and number if items in list", ref)
-        return_value += temp
-
-    return return_value, variables, items
-
+def bulk_replace(s: str, replacees: list[str], replacements: list, ref: str = None) -> str:
+    output = s
+    try:
+        for [variable_name, value] in zip(replacees, replacements, strict=True):
+            output = output.replace(variable_name, str(value))
+    except ValueError:
+        l.fatal("Mismatch in number of variables and number if items in list", ref)
+    return output
 
 def process_json(object: dict | list, path: str, parent: dict | list = None):
     if isinstance(object, list):
