@@ -85,7 +85,7 @@ def file_generations(tokens: list[str], lines: Consumable, path: str):
 def map_to_nested(li: Iterable):
     return [(i,) for i in li]
 
-def parse_for_loop(tokens: list[str], ref: str) -> (list[str], Iterable[str]):
+def parse_for_loop(tokens: list[str], ref: str) -> (list[str], list):
     if len(tokens) < 4:
         l.fatal(f"Too few tokens in for loop in tmcf comment - expected 'for <variable(s)> in <<list> | 'range' | 'enum'>'", ref)
 
@@ -115,7 +115,7 @@ def parse_for_loop(tokens: list[str], ref: str) -> (list[str], Iterable[str]):
         if len(tokens) != 5:
             l.fatal(f"Incorrect number of tokens for enumeration for loop in tmcf comment - expected 'enum <varname>'", ref)
         if tokens[4] in config["variables"]:
-            items = enumerate(config["variables"][tokens[4]])
+            items = list(enumerate(config["variables"][tokens[4]]))
         else:
             l.fatal(f"Failed to find variable '{tokens[4]} in config.'", ref)
     else:
@@ -148,7 +148,6 @@ def function_for_loop(tokens: list[str], lines: Consumable, path: str) -> (list[
     else:
         output = "".join(block_lines)
 
-    items = list(items) # enumerations can only be used once, so convert it to a list
     return [bulk_replace(output, variables, item) for item in items], variables, items
 
 def bulk_replace(s: str, replacees: list[str], replacements: list, ref: str = None) -> str:
@@ -157,7 +156,7 @@ def bulk_replace(s: str, replacees: list[str], replacements: list, ref: str = No
         for [variable_name, value] in zip(replacees, replacements, strict=True):
             output = output.replace(variable_name, str(value))
     except ValueError:
-        l.fatal("Mismatch in number of variables and number if items in list", ref)
+        l.fatal("Mismatch in number of variables and number of items in list", ref)
     return output
 
 def process_json(object: dict | list, path: str, parent: dict | list = None):
@@ -178,11 +177,11 @@ def process_json(object: dict | list, path: str, parent: dict | list = None):
                                 l.fatal("For loops in json files can only be used in objects inside arrays", generic_ref(path))
                             parent.remove(object)
                             object.pop("tmcf")
-                            replacee, items = parse_for_loop(tokens, generic_ref(path))
+                            variables, items = parse_for_loop(tokens, generic_ref(path))
                             self = json.dumps(object)
                             for [i, item] in enumerate(items):
-                                replaced = json.loads(self.replace(replacee, str(item)))
-                                # this is cursed as hell
+                                replaced = json.loads(bulk_replace(self, variables, item))
+                                # this is cursed but works
                                 if i == 0:
                                     process_json(replaced, path, object)
                                 parent.append(replaced)
