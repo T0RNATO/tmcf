@@ -87,14 +87,15 @@ assets_out = './dist/rp'
 The file structure for a tmcf project looks like a `pack.mcmeta`, `tmcf.toml`, and a `data` and `assets` folders, all next to each other. tmcf will build your datapack and resource pack from the two folders into the paths specified by the config - usually directly into your Minecraft folders, which the CLI has a handy tool for when you run `tmcf init pack`.
 
 tmcf also has support for json files:
-```json
+<pre>
+<code class="language-json">
 {
     "model": {
         "type": "minecraft:range_dispatch",
         "property": "minecraft:custom_model_data",
         "entries": [
             {
-                "tmcf": "for 42 in range 10",
+                <mark>"tmcf": "for 42 in range 10"</mark>,
                 "threshold": 42,
                 "model": {
                     "type": "minecraft:model",
@@ -104,4 +105,5 @@ tmcf also has support for json files:
         ]
     }
 }
-```
+</code>
+</pre>
