@@ -6,20 +6,29 @@ tmcf has three goals:
 2. Be as simple as possible
 3. Work fully with current mcfunction tooling like [Spyglass](https://github.com/SpyglassMC/Spyglass) (unlike [Bolt](https://github.com/mcbeet/bolt), etc)
 
+Basically, this is for datapack purists who have been turned off by the complexity of Beet, but are sick of having their packs littered with small python files.
+
 🚧(This project is not yet suitable for use, and as such is not yet published on pypi.)🚧
 
 ## Quickstart
 Run `tmcf init pack` inside an empty directory and follow the steps.
 
-## Syntax
-Here's an example within a function file:
+## For Loops
+Anywhere within a function file, you may use this syntax:
 ```mcfunction
-say Function start
-#@ for i in range 10
+#@ for i in range 4
     say i
 #@
 ```
-There's no magic here - tmcf just looks at the text between the `#@` comments and performs an unintelligent `.replace()`
+There's no magic here - tmcf just looks at the text between the `#@` comments and performs an unintelligent `.replace()`.
+
+The above example gets compiled into this:
+```mcfunction
+say 0
+say 1
+say 2
+say 3
+```
 
 It's common practice to use a variable name that is a number - this way, Spyglass will have no issues with your file and still provide autocomplete, highlighting, etc:
 ```mcfunction
@@ -29,7 +38,8 @@ It's common practice to use a variable name that is a number - this way, Spyglas
 ```
 This may look kinda cursed, and admittedly it is, but it's nothing but functional.
 
-tmcf also features variables, defined in the config, among other things
+## Variables
+You can define variables to be used inside your scripts inside the tmcf config.
 ```toml
 # tmcf.toml
 [variables]
@@ -41,6 +51,32 @@ entity_tags = ["foo", "bar", "baz"]
     tellraw @s {"text":"summoned tagname!"}
 #@
 ```
+Variables can feature nesting:
+```toml
+# tmcf.toml
+[variables]
+foo = [[1,2,3],[4,5,6],[7,8,9]]
+```
+```mcfunction
+#@ for i,j,k in foo
+    say ijk
+#@
+```
+This generates the following file:
+```mcfunction
+say 123
+say 456
+say 789
+```
+Note that spaces are not allowed after the commas between variables names because I'm lazy with parsing.
+## Enumeration
+In addition to `range`, there is one other special case - `enum`. This also behaves exactly like the python function of the same name - `enumerate`.
+```mcfunction
+#@ for index,str in enum myvar
+...
+#@
+```
+## Generate
 The `for` syntax also has an extension - `generate`.
 ```toml
 [variables]
@@ -84,18 +120,19 @@ assets_out = './dist/rp'
 # Replacement only within json files:
  json.foo = "replacement"
 ```
-The file structure for a tmcf project looks like a `pack.mcmeta`, `tmcf.toml`, and a `data` and `assets` folders, all next to each other. tmcf will build your datapack and resource pack from the two folders into the paths specified by the config - usually directly into your Minecraft folders, which the CLI has a handy tool for when you run `tmcf init pack`.
-
+## File Structure
+The file structure for a tmcf project looks like a `pack.mcmeta`, `tmcf.toml`, and a `data` and `assets` folders, all next to each other.
+tmcf will build your datapack and resource pack from the two folders into the paths specified by the config - usually directly into your Minecraft folders, which the CLI has a handy tool for when you run `tmcf init pack`.
+## Json Files
 tmcf also has support for json files:
-<pre>
-<code class="language-json">
+```json
 {
     "model": {
         "type": "minecraft:range_dispatch",
         "property": "minecraft:custom_model_data",
         "entries": [
             {
-                <mark>"tmcf": "for 42 in range 10"</mark>,
+                "tmcf": "for 42 in range 10",
                 "threshold": 42,
                 "model": {
                     "type": "minecraft:model",
@@ -105,5 +142,7 @@ tmcf also has support for json files:
         ]
     }
 }
-</code>
-</pre>
+```
+The `tmcf` key can be added to any object that is inside an array, and uses the exact same syntax and parsing as the comment inside a function.
+
+In the future, root objects will support the `generate` function inside `tmcf` keys in json files.

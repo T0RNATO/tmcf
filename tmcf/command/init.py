@@ -69,13 +69,15 @@ def init_config():
         possible_rp_path = join(vanillapath, "resourcepacks")
         saves = os.listdir(saves_path)
 
-    if len(saves):
+    if saves and len(saves):
         save = choose_option("Choose a save to build the datapack to", saves)
         if save.isnumeric():
             datapack_path = join(saves_path, saves[int(save)], "datapacks")
             config += f"data_output = {datapack_path}\n"
         else:
             l.warn("No datapack build path specified, defaulting.")
+    else:
+        l.warn("No minecraft installation found on computer. Defaulting datapack build path.")
 
     if possible_rp_path:
         prompt(f"Use {possible_rp_path} to build the resource pack to? (y/n)")
