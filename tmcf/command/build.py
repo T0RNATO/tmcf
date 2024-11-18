@@ -75,7 +75,6 @@ def file_generations(tokens: list[str], lines: Consumable, path: str):
     out_dp = os.path.join(config["data_out"], "tmcf_build")
     functions, variables, replacementss = function_for_loop(tokens[2:], lines, path)
 
-    print(functions, variables, list(replacementss))
     for [function, replacements] in zip(functions, replacementss):
         filename = bulk_replace(tokens[2], variables, replacements)
         if filename == tokens[2]:
