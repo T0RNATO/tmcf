@@ -1,7 +1,7 @@
 import os
 import sys
 
-# Class for printing colours, and it somehow also turned into a logging handler too (oops)
+# Class for logging & colours
 class Logging:
     BLACK = '\033[30m'
     RED = '\033[31m'

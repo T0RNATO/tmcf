@@ -16,35 +16,45 @@ def build_pack(conf: ConfigType):
 
     l.success("Building!")
 
-    # Prepare output for writing
     out_dp = os.path.join(config["data_out"], "tmcf_build")
     out_rp = os.path.join(config["assets_out"], "tmcf_build")
 
+    # Delete previous build
     shutil.rmtree(out_dp, ignore_errors=True)
     shutil.rmtree(out_rp, ignore_errors=True)
 
+    # Create output directories
     os.makedirs(out_dp, exist_ok=True)
     os.makedirs(out_rp, exist_ok=True)
 
     shutil.copy("./pack.mcmeta", out_dp)
     shutil.copy("./pack.mcmeta", out_rp)
 
+    # Process functions
     functions = glob.glob("./data/**/*.mcfunction", recursive=True)
     for function_path in functions:
         with open(function_path, "r") as f:
             output = ""
             lines = Consumable(f.readlines())
-        while lines.consumable():
+
+        # Process the lines of the function
+        while lines.is_consumable():
             output += handle_line(lines, function_path)
+
+        # Only write to output if function has contents
         if output.strip():
+            # Handle global replacements
             for replacee, replacement in config["global_replace"]["function"].items():
                 output = output.replace(replacee, replacement)
+
             write(os.path.join(out_dp, function_path[2:]), output)
 
+    # Process json files
     json_files = glob.glob("./data/**/*.json", recursive=True)
     for json_path in json_files:
         with open(json_path, "r") as f:
             j = json.load(f)
+
         process_json(j, json_path)
         write(os.path.join(out_dp, json_path[2:]), json.dumps(j, indent = 2))
 
@@ -53,22 +63,26 @@ def build_pack(conf: ConfigType):
 
 def handle_line(lines: Consumable, path: str):
     line = lines.consume()
-    if line.startswith("#@"):
-        tokens = line.strip().split(" ")
-        if len(tokens) > 1:
-            match tokens[1]:
-                case "for":
-                    content, *_ = function_for_loop(tokens, lines, path)
-                    return "".join(content)
-                case "generate":
-                    file_generations(tokens, lines, path)
-                    return ""
-                case _ as t:
-                    l.fatal(f"Unexpected token '{t}' in tmcf comment - expected 'for' or 'generate'", function_ref(path, lines.index))
 
-        l.fatal(f"Missing token after tmcf comment - expected 'for' or 'generate'", function_ref(path, lines.index))
+    if not line.startswith("#@"): return line
 
-    else: return line
+    tokens = line.strip().split(" ")
+
+    if not len(tokens) > 1:
+        l.fatal(f"Missing token after tmcf comment - expected 'for', 'generate', or 'using'", function_ref(path, lines.index))
+
+    match tokens[1]:
+        case "for":
+            content, *_ = function_for_loop(tokens, lines, path)
+            return "".join(content)
+        case "generate":
+            file_generations(tokens, lines, path)
+            return ""
+        case "using":
+            return
+        case _ as t:
+            l.fatal(f"Unexpected token '{t}' in tmcf comment - expected 'for', 'generate', or 'using'", function_ref(path, lines.index))
+
 
 
 def file_generations(tokens: list[str], lines: Consumable, path: str):
@@ -89,15 +103,17 @@ def parse_for_loop(tokens: list[str], ref: str) -> (list[str], list):
     if len(tokens) < 4:
         l.fatal(f"Too few tokens in for loop in tmcf comment - expected 'for <variable(s)> in <<list> | 'range' | 'enum'>'", ref)
 
-    variables = tokens[1].split(",")
     if tokens[2] != "in":
         l.fatal(f"Unexpected token '{tokens[2]}' in tmcf comment - expected 'in'", ref)
+
+    variables = tokens[1].split(",")
 
     replacement = tokens[3]
     items = []
     if replacement == "range":
         if len(tokens) != 5:
             l.fatal(f"Incorrect number of tokens for range for loop in tmcf comment - expected 'range <start>:<end>[:<step>]'", ref)
+
         if tokens[4] in config["variables"]:
             args = config["variables"][tokens[4]]
             if isinstance(args, list):
@@ -111,38 +127,49 @@ def parse_for_loop(tokens: list[str], ref: str) -> (list[str], list):
             if not all([a.isnumeric() for a in t]):
                 l.fatal(f"Invalid arguments '{tokens[4]}' to range for loop in tmcf comment - expected 'range <start>:<end>[:<step>]'", ref)
             items = map_to_nested(range(*[int(a) for a in t]))
+
     elif replacement == "enum":
         if len(tokens) != 5:
             l.fatal(f"Incorrect number of tokens for enumeration for loop in tmcf comment - expected 'enum <varname>'", ref)
+
         if tokens[4] in config["variables"]:
             items = list(enumerate(config["variables"][tokens[4]]))
         else:
             l.fatal(f"Failed to find variable '{tokens[4]} in config.'", ref)
+
     else:
         if replacement not in config["variables"]:
             l.fatal(f"Failed to find variable '{replacement}' used in for loop in config", ref)
         items = config["variables"][replacement]
         nested = all([isinstance(i, list) for i in items])
+
         if any([isinstance(i, list) for i in items]) and not nested:
             l.fatal(f"Variable '{replacement}' contains mixed types.")
         if not nested:
             items = map_to_nested(items)
         if not isinstance(items, list):
             l.fatal(f"Variable '{replacement}' used in for loop is not a list", ref)
+
     return variables, items
 
 def function_for_loop(tokens: list[str], lines: Consumable, path: str) -> (list[str], list[str], list):
+    # File reference of the function, to be used if an error is found
     ref = function_ref(path, lines.index)
     variables, items = parse_for_loop(tokens[1:], ref)
+    # Lines of text in the comment "block" defined with #@
     block_lines: list[str] = []
 
     while True:
         block_line = lines.preview()
+
+        # Stop parsing when the closing comment "#@" is reached
         if block_line.strip() == "#@":
             lines.consume()
             break
+
         block_lines.append(handle_line(lines, path))
 
+    # Handle blocks that contain commented-out commands in order to not have IDE errors
     if all([line.startswith("#") for line in block_lines]):
         output = "".join([line[1:] for line in block_lines])
     else:
@@ -151,6 +178,7 @@ def function_for_loop(tokens: list[str], lines: Consumable, path: str) -> (list[
     return [bulk_replace(output, variables, item) for item in items], variables, items
 
 def bulk_replace(s: str, replacees: list[str], replacements: list, ref: str = None) -> str:
+    # Replaces each instance of a substring in `s` in `replacees` with the corresponding replacement from `replacements`
     output = s
     try:
         for [variable_name, value] in zip(replacees, replacements, strict=True):
@@ -164,32 +192,37 @@ def process_json(object: dict | list, path: str, parent: dict | list = None):
         for obj in object:
             if isinstance(obj, list) or isinstance(obj, dict):
                 process_json(obj, path, object)
-    else:
-        for [key, value] in object.items():
-            if isinstance(value, list) or isinstance(value, dict):
-                process_json(value, path, object)
-            elif key == "tmcf":
-                tokens = value.split(" ")
-                if len(tokens) > 0:
-                    match tokens[0]:
-                        case "for":
-                            if not isinstance(parent, list):
-                                l.fatal("For loops in json files can only be used in objects inside arrays", generic_ref(path))
-                            parent.remove(object)
-                            object.pop("tmcf")
-                            variables, items = parse_for_loop(tokens, generic_ref(path))
-                            self = json.dumps(object)
-                            for [i, item] in enumerate(items):
-                                replaced = json.loads(bulk_replace(self, variables, item))
-                                # this is cursed but works
-                                if i == 0:
-                                    process_json(replaced, path, object)
-                                parent.append(replaced)
-                            return
-                        case "generate":
-                            # todo
-                            return
-                        case _ as t:
-                            l.fatal(f"Unexpected token '{t}' in 'tmcf' json key  - expected 'for' or 'generate'", generic_ref(path))
+        return
 
+    for [key, value] in object.items():
+        if isinstance(value, list) or isinstance(value, dict):
+            process_json(value, path, object)
+
+        elif key == "tmcf":
+            tokens = value.split(" ")
+            if not len(tokens) > 0:
                 l.fatal(f"Missing token in 'tmcf' json key - expected 'for' or 'generate'", generic_ref(path))
+
+            match tokens[0]:
+                case "for":
+                    if not isinstance(parent, list):
+                        l.fatal("For loops in json files can only be used in objects inside arrays", generic_ref(path))
+
+                    parent.remove(object)
+                    object.pop("tmcf")
+
+                    variables, items = parse_for_loop(tokens, generic_ref(path))
+                    self = json.dumps(object)
+
+                    for [i, item] in enumerate(items):
+                        replaced = json.loads(bulk_replace(self, variables, item))
+                        # this is cursed but works
+                        if i == 0:
+                            process_json(replaced, path, object)
+                        parent.append(replaced)
+                    return
+                case "generate":
+                    # todo
+                    return
+                case _ as t:
+                    l.fatal(f"Unexpected token '{t}' in 'tmcf' json key  - expected 'for' or 'generate'", generic_ref(path))
