@@ -62,7 +62,7 @@ def build_pack(conf: ConfigType):
 
 
 def handle_line(lines: Consumable, path: str):
-    line = lines.consume()
+    line = lines.consume().strip()
 
     if not line.startswith("#@"): return line
 
@@ -74,15 +74,48 @@ def handle_line(lines: Consumable, path: str):
     match tokens[1]:
         case "for":
             content, *_ = function_for_loop(tokens, lines, path)
-            return "".join(content)
+            return "\n".join(content)
         case "generate":
             file_generations(tokens, lines, path)
             return ""
         case "using":
-            return
+            return using_variable(tokens[1:], lines, path)
         case _ as t:
             l.fatal(f"Unexpected token '{t}' in tmcf comment - expected 'for', 'generate', or 'using'", function_ref(path, lines.index))
 
+
+def get_variable_from_config(name: str, ref: str):
+    if name in config["variables"]:
+        return config["variables"][name]
+    l.fatal(f"Failed to find variable '{name}' in config.", ref)
+
+
+def using_variable(tokens: list[str], lines: Consumable, path: str) -> str:
+    if len(tokens) != 4:
+        l.fatal("Not enough tokens in 'using' block", function_ref(path, lines.index))
+
+    variable = tokens[1]
+    if tokens[2] != "as":
+        l.fatal(f"Unexpected token '{tokens[2]}' in 'using' block - expected 'as'", function_ref(path, lines.index))
+
+    replacement = get_variable_from_config(tokens[3], function_ref(path, lines.index))
+
+    if isinstance(replacement, dict) or isinstance(replacement, list):
+        l.fatal("Variable used in 'using' block must be a string or number.")
+
+    output: list[str] = []
+
+    while True:
+        line = lines.preview()
+
+        # Stop parsing when the closing comment "#@" is reached
+        if line.strip() == "#@":
+            lines.consume()
+            break
+
+        output.append(handle_line(lines, path))
+
+    return "\n".join(output).replace(variable, str(replacement))
 
 
 def file_generations(tokens: list[str], lines: Consumable, path: str):
@@ -132,15 +165,10 @@ def parse_for_loop(tokens: list[str], ref: str) -> (list[str], list):
         if len(tokens) != 5:
             l.fatal(f"Incorrect number of tokens for enumeration for loop in tmcf comment - expected 'enum <varname>'", ref)
 
-        if tokens[4] in config["variables"]:
-            items = list(enumerate(config["variables"][tokens[4]]))
-        else:
-            l.fatal(f"Failed to find variable '{tokens[4]} in config.'", ref)
+        items = list(enumerate(get_variable_from_config(tokens[4], ref)))
 
     else:
-        if replacement not in config["variables"]:
-            l.fatal(f"Failed to find variable '{replacement}' used in for loop in config", ref)
-        items = config["variables"][replacement]
+        items = get_variable_from_config(replacement, ref)
         nested = all([isinstance(i, list) for i in items])
 
         if any([isinstance(i, list) for i in items]) and not nested:
@@ -171,9 +199,9 @@ def function_for_loop(tokens: list[str], lines: Consumable, path: str) -> (list[
 
     # Handle blocks that contain commented-out commands in order to not have IDE errors
     if all([line.startswith("#") for line in block_lines]):
-        output = "".join([line[1:] for line in block_lines])
+        output = "\n".join([line[1:] for line in block_lines])
     else:
-        output = "".join(block_lines)
+        output = "\n".join(block_lines)
 
     return [bulk_replace(output, variables, item) for item in items], variables, items
 
@@ -222,6 +250,9 @@ def process_json(object: dict | list, path: str, parent: dict | list = None):
                         parent.append(replaced)
                     return
                 case "generate":
+                    # todo
+                    return
+                case "using":
                     # todo
                     return
                 case _ as t:

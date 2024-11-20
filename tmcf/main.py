@@ -46,8 +46,8 @@ def validate_config() -> ConfigType:
                 l.fatal("Found reserved variable name 'range' in config.")
 
             for var, val in config["variables"].items():
-                if not (isinstance(val, list) or isinstance(val, int)):
-                    l.fatal(f"Variable '{var}' in config must be a list or int.")
+                if isinstance(val, dict):
+                    l.fatal(f"Variable '{var}' in config must be a list, number, or string")
 
         if "global_replace" in config:
             stripped = config["global_replace"].copy()
