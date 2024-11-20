@@ -3,9 +3,9 @@ import tomllib
 from typing import TypedDict
 from os.path import exists
 
-from .logging import l
-from .command import init
-from .command import build
+from tmcf.logging import l
+from tmcf.command import init
+from tmcf.command import build
 
 class ConfigType(TypedDict):
     global_replace: dict

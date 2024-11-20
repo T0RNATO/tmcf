@@ -4,9 +4,9 @@ import os
 import shutil
 from typing import Iterable
 
-from ..main import ConfigType
-from ..logging import l, function_ref, generic_ref
-from ..utils import write, Consumable
+from tmcf.main import ConfigType
+from tmcf.logging import l, function_ref, generic_ref
+from tmcf.utils import write, Consumable
 
 config: ConfigType = None
 

@@ -1,4 +1,4 @@
-from .logging import l
+from tmcf.logging import l
 
 def prompt(s: str, opt = False):
     l.print_e("> ", l.CYAN, l.BOLD)

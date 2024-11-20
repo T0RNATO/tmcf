@@ -2,8 +2,8 @@ import json
 import os
 from os.path import join
 
-from ..cli import prompt, choose_option
-from ..logging import l
+from tmcf.cli import prompt, choose_option
+from tmcf.logging import l
 
 
 def make_pack_folders():
