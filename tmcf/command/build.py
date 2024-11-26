@@ -16,8 +16,8 @@ def build_pack(conf: ConfigType):
 
     l.success("Building!")
 
-    out_dp = os.path.join(config["data_out"], "tmcf_build")
-    out_rp = os.path.join(config["assets_out"], "tmcf_build")
+    out_dp = config["data_out"]
+    out_rp = config["assets_out"]
 
     # Delete previous build
     shutil.rmtree(out_dp, ignore_errors=True)
@@ -119,7 +119,6 @@ def using_variable(tokens: list[str], lines: Consumable, path: str) -> str:
 
 
 def file_generations(tokens: list[str], lines: Consumable, path: str):
-    out_dp = os.path.join(config["data_out"], "tmcf_build")
     functions, variables, replacementss = function_for_loop(tokens[2:], lines, path)
 
     for [function, replacements] in zip(functions, replacementss):
@@ -127,12 +126,13 @@ def file_generations(tokens: list[str], lines: Consumable, path: str):
         if filename == tokens[2]:
             l.fatal(f"Function file names in 'generate' must include a variable from the for loop (cannot create duplicate file names)", function_ref(path, lines.index))
 
-        write(os.path.join(out_dp, path[2:], f"../{filename}.mcfunction"), function)
+        write(os.path.join(config["data_out"], path[2:], f"../{filename}.mcfunction"), function)
 
 def map_to_nested(li: Iterable):
     return [(i,) for i in li]
 
 def parse_for_loop(tokens: list[str], ref: str) -> (list[str], list):
+    print(tokens)
     if len(tokens) < 4:
         l.fatal(f"Too few tokens in for loop in tmcf comment - expected 'for <variable(s)> in <<list> | 'range' | 'enum'>'", ref)
 
@@ -242,15 +242,25 @@ def process_json(object: dict | list, path: str, parent: dict | list = None):
                     variables, items = parse_for_loop(tokens, generic_ref(path))
                     self = json.dumps(object)
 
-                    for [i, item] in enumerate(items):
-                        replaced = json.loads(bulk_replace(self, variables, item))
+                    for [i, replacees] in enumerate(items):
+                        replaced = json.loads(bulk_replace(self, variables, replacees))
                         # this is cursed but works
                         if i == 0:
                             process_json(replaced, path, object)
                         parent.append(replaced)
                     return
                 case "generate":
-                    # todo
+                    if parent:
+                        l.fatal("File generation in json files can only be used in the root object", generic_ref(path))
+                    object.pop("tmcf")
+
+                    variables, items = parse_for_loop(tokens[2:], generic_ref(path))
+                    process_json(object, path)
+                    self = json.dumps(object)
+
+                    for replacees in items:
+                        filename = bulk_replace(tokens[1], variables, replacees)
+                        write(os.path.join(config["data_out"], path[2:], f"../{filename}.json"), bulk_replace(self, variables, replacees))
                     return
                 case "using":
                     # todo

@@ -1,7 +1,7 @@
 import sys
 import tomllib
 from typing import TypedDict
-from os.path import exists
+from os.path import exists, join
 
 from tmcf.logging import l
 from tmcf.command import init
@@ -57,6 +57,9 @@ def validate_config() -> ConfigType:
                 "function": {**config["global_replace"].get("function", {}), **stripped},
                 "json": {**config["global_replace"].get("json", {}), **stripped}
             }
+
+    config["data_out"] = join(config["data_out"], "tmcf_build")
+    config["assets_out"] = join(config["assets_out"], "tmcf_build")
     return config
 
 if __name__ == '__main__':
