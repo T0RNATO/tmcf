@@ -39,7 +39,7 @@ def build_pack(conf: ConfigType):
 
         # Process the lines of the function
         while lines.is_consumable():
-            output += handle_line(lines, function_path)
+            output += handle_line(lines, function_path) + "\n"
 
         # Only write to output if function has contents
         if output.strip():
