@@ -171,4 +171,4 @@ tmcf also has support for json files:
 ```
 The `tmcf` key can be added to any object that is inside an array, and uses the exact same syntax and parsing as the comment inside a function.
 
-In the future, root objects will support the `generate` function inside `tmcf` keys in json files.
+The `generate` keyword also works inside json files, only on the root element in a json file. Syntax is the same as in a function.
