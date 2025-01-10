@@ -90,17 +90,21 @@ def get_variable_from_config(name: str, ref: str):
     l.fatal(f"Failed to find variable '{name}' in config.", ref)
 
 
-def using_variable(tokens: list[str], lines: Consumable, path: str) -> str:
+def parse_using(tokens: list[str], err_ref: str) -> (list[str], list[object]):
     if len(tokens) != 4:
-        l.fatal("Not enough tokens in 'using' block", function_ref(path, lines.index))
+        l.fatal("Not enough tokens in 'using' block", err_ref)
 
-    variable = tokens[1]
+    variables = tokens[1].split(",")
     if tokens[2] != "as":
-        l.fatal(f"Unexpected token '{tokens[2]}' in 'using' block - expected 'as'", function_ref(path, lines.index))
+        l.fatal(f"Unexpected token '{tokens[2]}' in 'using' block - expected 'as'", err_ref)
 
-    replacement = get_variable_from_config(tokens[3], function_ref(path, lines.index))
+    replacements = [get_variable_from_config(token, err_ref) for token in tokens[3].split(",")]
+    return variables, replacements
 
-    if isinstance(replacement, dict) or isinstance(replacement, list):
+def using_variable(tokens: list[str], lines: Consumable, path: str) -> str:
+    variables, replacements = parse_using(tokens, function_ref(path, lines.index))
+
+    if any([isinstance(replacement, dict) or isinstance(replacement, list) for replacement in replacements]):
         l.fatal("Variable used in 'using' block must be a string or number.")
 
     output: list[str] = []
@@ -115,7 +119,7 @@ def using_variable(tokens: list[str], lines: Consumable, path: str) -> str:
 
         output.append(handle_line(lines, path))
 
-    return "\n".join(output).replace(variable, str(replacement))
+    return bulk_replace("\n".join(output), variables, replacements, function_ref(path, lines.index))
 
 
 def file_generations(tokens: list[str], lines: Consumable, path: str):
@@ -132,7 +136,6 @@ def map_to_nested(li: Iterable):
     return [(i,) for i in li]
 
 def parse_for_loop(tokens: list[str], ref: str) -> (list[str], list):
-    print(tokens)
     if len(tokens) < 4:
         l.fatal(f"Too few tokens in for loop in tmcf comment - expected 'for <variable(s)> in <<list> | 'range' | 'enum'>'", ref)
 
@@ -229,7 +232,7 @@ def process_json(object: dict | list, path: str, parent: dict | list = None):
         elif key == "tmcf":
             tokens = value.split(" ")
             if not len(tokens) > 0:
-                l.fatal(f"Missing token in 'tmcf' json key - expected 'for' or 'generate'", generic_ref(path))
+                l.fatal(f"Missing token in 'tmcf' json key - expected 'for', 'generate' or 'using'", generic_ref(path))
 
             match tokens[0]:
                 case "for":
@@ -242,8 +245,13 @@ def process_json(object: dict | list, path: str, parent: dict | list = None):
                     variables, items = parse_for_loop(tokens, generic_ref(path))
                     self = json.dumps(object)
 
-                    for [i, replacees] in enumerate(items):
-                        replaced = json.loads(bulk_replace(self, variables, replacees))
+                    for [i, replacements] in enumerate(items):
+                        try:
+                            replaced = json.loads(bulk_replace(self, variables, replacements, generic_ref(path)))
+                        except json.JSONDecodeError:
+                            print(bulk_replace(json.dumps(self, indent=4), variables, replacements))
+                            l.fatal("Json decode error. Output shown above", generic_ref(path))
+                            return # keeps pycharm happy
                         # this is cursed but works
                         if i == 0:
                             process_json(replaced, path, object)
@@ -258,12 +266,21 @@ def process_json(object: dict | list, path: str, parent: dict | list = None):
                     process_json(object, path)
                     self = json.dumps(object)
 
-                    for replacees in items:
-                        filename = bulk_replace(tokens[1], variables, replacees)
-                        write(os.path.join(config["data_out"], path[2:], f"../{filename}.json"), bulk_replace(self, variables, replacees))
+                    for replacements in items:
+                        filename = bulk_replace(tokens[1], variables, replacements)
+                        write(os.path.join(config["data_out"], path[2:], f"../{filename}.json"), bulk_replace(self, variables, replacements))
                     return
                 case "using":
-                    # todo
+                    variables, replacements = parse_using(tokens, generic_ref(path))
+
+                    parent.remove(object)
+                    object.pop("tmcf")
+                    self = json.dumps(object)
+                    try:
+                        parent.append(json.loads(bulk_replace(self, variables, replacements, generic_ref(path))))
+                    except json.JSONDecodeError:
+                        print(bulk_replace(json.dumps(self, indent=4), variables, replacements))
+                        l.fatal("Json decode error. Output shown above", generic_ref(path))
                     return
                 case _ as t:
-                    l.fatal(f"Unexpected token '{t}' in 'tmcf' json key  - expected 'for' or 'generate'", generic_ref(path))
+                    l.fatal(f"Unexpected token '{t}' in 'tmcf' json key  - expected 'for', 'generate' or 'using'", generic_ref(path))
