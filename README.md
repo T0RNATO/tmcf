@@ -13,22 +13,73 @@ Basically, this is for datapack purists who have been turned off by the complexi
 ## Quickstart
 Run `tmcf init pack` inside an empty directory and follow the steps.
 
+## Index
+
+Key knowledge:
+- [Variables](#variables)
+- [Config](#config)
+- [File Structure](#file-structure)
+- [Use with JSON files](#json-files)
+
+Keywords:
+- [for](#for-loops)
+- [using](#using)
+- [generate](#generate)
+
+## Variables
+You can define variables to be used inside your scripts using the tmcf config.
+```toml
+# tmcf.toml (trimmed)
+[variables]
+entity_tags = ["foo", "bar", "baz"]
+numbers = [4, 5, 6]
+foo = 12
+```
+Variables can also feature nesting, and be unwrapped by specifying multiple variables: `for i,j,k in foo`
+```toml
+# tmcf.toml
+[variables]
+bar = [[1,2,3],[4,5,6],[7,8,9]]
+```
+
 ## For Loops
 Anywhere within a function file, you may use this syntax:
 ```mcfunction
-#@ for i in range 4
-    say i
+#@ for entity_tag in entity_tags
+    summon pig ~ ~ ~ {Tags:["entity_tag"]}
 #@
 ```
-There's no magic here - tmcf just looks at the text between the `#@` comments and performs an unintelligent `.replace()`.
-
-The above example gets compiled into this:
+There's no magic here - tmcf just looks at the text between the `#@` comments and performs a simple `.replace()`, resulting in the following function file:
+```mcfunction
+summon pig ~ ~ ~ {Tags:["foo"]}
+summon pig ~ ~ ~ {Tags:["bar"]}
+summon pig ~ ~ ~ {Tags:["baz"]}
+```
+There are two special keywords that can be used instead of a variable name - `range`, and `enum`.
+They function like their similarly-named python functions, with arguments delimited by colons.
+```mcfunction
+#@ for index in range 2
+    say index
+#@
+#@ for index in range 2:10:3
+    say hi index
+#@
+#@ for index,num in enum numbers
+    say index num
+#@
+```
+Produces:
 ```mcfunction
 say 0
 say 1
-say 2
-say 3
+say hi 2
+say hi 5
+say hi 8
+say 0 4
+say 1 5
+say 2 6
 ```
+Note that spaces are not allowed after the commas between variables names (see: `index,num`) because I'm lazy with parsing.
 
 It's common practice to use a variable name that is a number - this way, Spyglass will have no issues with your file and still provide autocomplete, highlighting, etc:
 ```mcfunction
@@ -38,44 +89,6 @@ It's common practice to use a variable name that is a number - this way, Spyglas
 ```
 This may look kinda cursed, and admittedly it is, but it's nothing but functional.
 
-## Variables
-You can define variables to be used inside your scripts inside the tmcf config.
-```toml
-# tmcf.toml
-[variables]
-entity_tags = ["foo", "bar", "baz"]
-```
-```mcfunction
-#@ for tagname in entity_tags
-    summon item_display ~ ~ ~ {Tags:["tagname"]}
-    tellraw @s {"text":"summoned tagname!"}
-#@
-```
-Variables can feature nesting:
-```toml
-# tmcf.toml
-[variables]
-foo = [[1,2,3],[4,5,6],[7,8,9]]
-```
-```mcfunction
-#@ for i,j,k in foo
-    say ijk
-#@
-```
-This generates the following file:
-```mcfunction
-say 123
-say 456
-say 789
-```
-Note that spaces are not allowed after the commas between variables names because I'm lazy with parsing.
-## Enumeration
-In addition to `range`, there is one other special case - `enum`. This also behaves exactly like the python function of the same name - `enumerate`.
-```mcfunction
-#@ for index,str in enum myvar
-...
-#@
-```
 ## Generate
 The `for` syntax also has an extension - `generate`.
 ```toml
@@ -101,6 +114,19 @@ The colon syntax in that example just allows you to specify a start and step - (
 
 Also note that the indentation isn't necessary, just good practice.
 
+## Using
+For a kind of config, you can just directly string replace variables.
+```mcfunction
+#@ using var as foo
+    say var
+#@
+```
+Produces
+```mcfunction
+say 12
+```
+
+
 ## Config
 ```toml
 # File path to the "datapacks" folder to build into
@@ -112,7 +138,7 @@ assets_out = './dist/rp'
 [variables]
  example = [1, 2, 3]
 
-# Globally replaces strings
+# Globally replaces strings - beware footguns
 [global_replace]
  example_string = "replacement"
 # Replacement only within function files:
